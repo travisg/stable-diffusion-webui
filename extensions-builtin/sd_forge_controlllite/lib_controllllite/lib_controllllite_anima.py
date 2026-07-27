@@ -158,7 +158,8 @@ class LLLiteModuleDiT(nn.Module):
         nn.init.zeros_(self.up.bias)
 
         self.cond_emb: Optional[torch.Tensor] = None
-        self.org_forward = None
+        self._is_applied: bool = False
+        self._current_chain_idx: int = 0
         self.layer_idx: int = -1
         self._depth_embeds_ref: list[nn.Parameter] = []
 
@@ -168,15 +169,58 @@ class LLLiteModuleDiT(nn.Module):
         self.current_step: int = 0
         self.is_first: bool = False
 
+    @property
+    def org_forward(self):
+        if not getattr(self, "_is_applied", False):
+            return None
+
+        def _call_next(x, *args, **kwargs):
+            return self._run_next_in_chain(getattr(self, "_current_chain_idx", 0), x, *args, **kwargs)
+
+        return _call_next
+
     def apply_to(self):
-        if self.org_forward is None:
-            self.org_forward = self.org_module[0].forward
-            self.org_module[0].forward = self.forward
+        target = self.org_module[0]
+        if not hasattr(target, "_lllite_patches"):
+            target._lllite_patches = []
+            target._lllite_orig_forward = target.forward
+
+            def _chained_forward(x, *args, **kwargs):
+                patches = getattr(target, "_lllite_patches", [])
+                if not patches:
+                    return target._lllite_orig_forward(x, *args, **kwargs)
+                return patches[0]._run_chain(0, x, *args, **kwargs)
+
+            target.forward = _chained_forward
+
+        if self not in target._lllite_patches:
+            target._lllite_patches.append(self)
+        self._is_applied = True
 
     def restore(self):
-        if self.org_forward is not None:
-            self.org_module[0].forward = self.org_forward
-            self.org_forward = None
+        target = self.org_module[0]
+        if hasattr(target, "_lllite_patches"):
+            if self in target._lllite_patches:
+                target._lllite_patches.remove(self)
+            if not target._lllite_patches:
+                if hasattr(target, "_lllite_orig_forward"):
+                    target.forward = target._lllite_orig_forward
+                    delattr(target, "_lllite_orig_forward")
+                delattr(target, "_lllite_patches")
+        self._is_applied = False
+
+    def _run_next_in_chain(self, current_idx: int, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        target = self.org_module[0]
+        patches = getattr(target, "_lllite_patches", [])
+        next_idx = current_idx + 1
+        if next_idx < len(patches):
+            return patches[next_idx]._run_chain(next_idx, x, *args, **kwargs)
+        orig_fn = getattr(target, "_lllite_orig_forward", target.forward)
+        return orig_fn(x, *args, **kwargs)
+
+    def _run_chain(self, idx: int, x: torch.Tensor, *args, **kwargs) -> torch.Tensor:
+        self._current_chain_idx = idx
+        return self.forward(x)
 
     @torch.compiler.disable
     @torch.inference_mode()
