@@ -3,7 +3,6 @@
 import comfy_kitchen as ck
 import torch
 from comfy_kitchen.tensor import (  # noqa
-    AsymW4A8Int8Layout,
     QuantizedTensor,
     TensorCoreConvRotW4A4Layout,
     TensorCoreFP8Layout,
@@ -13,6 +12,10 @@ from comfy_kitchen.tensor import (  # noqa
     get_layout_class,
     register_layout_class,
 )
+try:
+    from comfy_kitchen.tensor import AsymW4A8Int8Layout
+except ImportError:
+    AsymW4A8Int8Layout = None
 
 if torch.version.cuda is None:
     ck.registry.disable("cuda")
@@ -150,7 +153,8 @@ register_layout_class("TensorCoreNVFP4Layout", TensorCoreNVFP4Layout_)
 register_layout_class("TensorCoreMXFP8Layout", TensorCoreMXFP8Layout_)
 register_layout_class("TensorWiseINT8Layout", TensorWiseINT8Layout)
 register_layout_class("TensorCoreConvRotW4A4Layout", TensorCoreConvRotW4A4Layout)
-register_layout_class("AsymW4A8Int8Layout", AsymW4A8Int8Layout)
+if AsymW4A8Int8Layout is not None:
+    register_layout_class("AsymW4A8Int8Layout", AsymW4A8Int8Layout)
 
 
 QUANT_ALGOS = {
