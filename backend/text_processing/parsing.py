@@ -82,4 +82,4 @@ def parse_prompt_attention(text: str, emphasis: str = None) -> list[tuple[str, f
 
 
 def strip_emphasis(prompt: str) -> str:
-    return "".join(text for text, _ in parse_prompt_attention(prompt))
+    return "".join(f" {text} " if text == "BREAK" else text for text, _ in parse_prompt_attention(prompt))

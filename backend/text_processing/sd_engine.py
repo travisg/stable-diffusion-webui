@@ -20,6 +20,7 @@ class PromptChunk:
     tokens: list[int] = field(default_factory=list)
     multipliers: list[float] = field(default_factory=list)
     fixes: list[PromptChunkFix] = field(default_factory=list)
+    token_count: int = 0
 
 
 class CLIPEmbeddingForTextualInversion(torch.nn.Module):
@@ -134,6 +135,7 @@ class ClipEngine:
         def next_chunk(is_last=False):
             nonlocal token_count, last_comma, chunk
 
+            chunk.token_count = len(chunk.tokens)
             token_count += len(chunk.tokens) if is_last else self.chunk_length
 
             to_add = self.chunk_length - len(chunk.tokens)
@@ -148,10 +150,15 @@ class ClipEngine:
             chunks.append(chunk)
             chunk = PromptChunk()
 
+        had_break = False
         for tokens, (text, weight) in zip(tokenized, parsed):
             if text == "BREAK" and weight == -1:
                 next_chunk()
+                had_break = True
                 continue
+
+            if tokens:
+                had_break = False
 
             position = 0
             while position < len(tokens):
@@ -193,7 +200,7 @@ class ClipEngine:
                 chunk.multipliers += [weight] * emb_len
                 position += embedding_length_in_tokens
 
-        if chunk.tokens or not chunks:
+        if chunk.tokens or not chunks or had_break:
             next_chunk(is_last=True)
 
         return chunks, token_count

@@ -159,8 +159,17 @@ def update_token_counter(text, steps, styles, *, is_positive=True):
 
     flat_prompts = reduce(lambda list1, list2: list1 + list2, prompt_schedules)
     prompts = [strip_emphasis(prompt_text) for _, prompt_text in flat_prompts]
-    token_count, max_length = max([get_prompt_lengths_on_ui(prompt) for prompt in prompts], key=lambda args: args[0])
-    return f"<span class='gr-box gr-text-input'>{token_count}/{max_length}</span>"
+    results = [get_prompt_lengths_on_ui(prompt) for prompt in prompts]
+    res = max(results, key=lambda args: args[0])
+    if len(res) >= 3 and res[2] and len(res[2]) > 1:
+        token_count, max_length, chunk_counts = res[:3]
+        counts_str = " | ".join(str(c) for c in chunk_counts)
+        total_tokens = sum(chunk_counts)
+        tooltip = ", ".join(f"Chunk {i+1}: {c}/75" for i, c in enumerate(chunk_counts)) + f" (Total: {total_tokens}/{max_length})"
+        return f"<span class='gr-box gr-text-input' title='{tooltip}'>{counts_str} / 75</span>"
+    else:
+        token_count, max_length = res[:2]
+        return f"<span class='gr-box gr-text-input'>{token_count}/{max_length}</span>"
 
 
 def update_negative_prompt_token_counter(*args):
