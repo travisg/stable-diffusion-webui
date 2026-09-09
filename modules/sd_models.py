@@ -239,6 +239,14 @@ def read_metadata_from_safetensors(filename):
 class FakeInitialModel:
     """a dummy class for compatibility when no model is loaded yet"""
 
+    def __init__(self):
+        self.forge_objects = None
+        self.is_sdxl = False
+        self.is_sd2 = False
+        self.is_sd1 = False
+        self.is_ssd = False
+        self._tokenizer = None
+
     @property
     def first_stage_model(self):
         return None
@@ -247,9 +255,46 @@ class FakeInitialModel:
     def cond_stage_model(self):
         return None
 
-    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int]:
-        r = len(prompt.strip("!?,. ").replace(" ", ",").replace(".", ",").replace("!", ",").replace("?", ",").split(","))
-        return r, math.ceil(max(r, 1) / 75) * 75
+    @property
+    def tokenizer(self):
+        if self._tokenizer is None:
+            try:
+                import os
+                from transformers import CLIPTokenizer
+                path = os.path.join(os.path.dirname(__file__), "..", "backend", "huggingface", "stabilityai", "stable-diffusion-xl-base-1.0", "tokenizer")
+                if os.path.exists(path):
+                    self._tokenizer = CLIPTokenizer.from_pretrained(path)
+            except Exception:
+                pass
+        return self._tokenizer
+
+    def get_prompt_lengths_on_ui(self, prompt: str) -> tuple[int, int, list[int]]:
+        tokenizer = self.tokenizer
+        if tokenizer is not None:
+            parts = [p.strip() for p in prompt.split("BREAK")]
+            chunk_counts = []
+            for p in parts:
+                if not p:
+                    chunk_counts.append(0)
+                    continue
+                tokens = tokenizer.tokenize(p)
+                count = len(tokens)
+                while count > 75:
+                    chunk_counts.append(75)
+                    count -= 75
+                chunk_counts.append(count)
+            if not chunk_counts:
+                chunk_counts = [0]
+            total = sum(chunk_counts)
+            return total, max(75, math.ceil(max(total, 1) / 75) * 75), chunk_counts
+
+        parts = [p.strip() for p in prompt.split("BREAK")]
+        chunk_counts = []
+        for p in parts:
+            words = [w for w in p.strip("!?,. ").replace(" ", ",").replace(".", ",").replace("!", ",").replace("?", ",").split(",") if w]
+            chunk_counts.append(len(words))
+        total = sum(chunk_counts)
+        return total, max(75, math.ceil(max(total, 1) / 75) * 75), chunk_counts
 
 
 class SdModelData:
