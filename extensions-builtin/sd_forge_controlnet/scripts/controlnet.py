@@ -518,13 +518,23 @@ class ControlNetForForgeOfficial(scripts.Script):
 
     @torch.no_grad()
     def process_before_every_sampling(self, p, *args, **kwargs):
+        if getattr(p, "control_net_disabled", False):
+            return
+
+        current_params = getattr(self, "current_params", {})
         for i, unit in enumerate(self.get_enabled_units(args)):
-            self.process_unit_before_every_sampling(p, unit, self.current_params[i], *args, **kwargs)
+            if i in current_params:
+                self.process_unit_before_every_sampling(p, unit, current_params[i], *args, **kwargs)
 
     @torch.no_grad()
     def postprocess_batch_list(self, p, pp, *args, **kwargs):
+        if getattr(p, "control_net_disabled", False):
+            return
+
+        current_params = getattr(self, "current_params", {})
         for i, unit in enumerate(self.get_enabled_units(args)):
-            self.process_unit_after_every_sampling(p, unit, self.current_params[i], pp, *args, **kwargs)
+            if i in current_params:
+                self.process_unit_after_every_sampling(p, unit, current_params[i], pp, *args, **kwargs)
 
     def postprocess(self, p, processed, *args):
         self.current_params = {}
