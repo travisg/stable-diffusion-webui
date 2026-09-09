@@ -1,3 +1,4 @@
+import os
 import re
 from functools import lru_cache
 
@@ -5,7 +6,7 @@ from PIL import Image
 
 from backend.memory_management import free_memory, module_size, soft_empty_cache
 from modules import devices, errors, modelloader
-from modules.shared import opts
+from modules.shared import models_path, opts
 from modules.upscaler import Upscaler, UpscalerData
 from modules.upscaler_utils import upscale_with_model
 
@@ -28,6 +29,13 @@ class UpscalerESRGAN(Upscaler):
         self.scalers = []
 
         model_paths = self.find_models(ext_filter=[".pt", ".pth", ".safetensors"])
+        for extra_name in ["DAT", "SwinIR", "RealESRGAN", "upscale_models"]:
+            extra_dir = os.path.join(models_path, extra_name)
+            if os.path.isdir(extra_dir) and extra_dir != self.model_path:
+                model_paths.extend(modelloader.load_models(extra_dir, ext_filter=[".pt", ".pth", ".safetensors"]))
+
+        # Remove duplicate paths while preserving order
+        model_paths = list(dict.fromkeys(model_paths))
         if len(model_paths) == 0:
             scaler_data = UpscalerData(self.model_name, self.model_url, self, 4)
             self.scalers.append(scaler_data)
