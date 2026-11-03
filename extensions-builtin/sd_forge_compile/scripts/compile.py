@@ -30,6 +30,26 @@ logger = logging.getLogger("compile")
 setup_logger(logger)
 
 
+def configure_dynamo(limit: int = 256):
+    try:
+        if hasattr(torch, "_dynamo"):
+            cfg = torch._dynamo.config
+            cfg.cache_size_limit = limit
+            if hasattr(cfg, "recompile_limit"):
+                cfg.recompile_limit = limit
+            if hasattr(cfg, "accumulated_recompile_limit"):
+                cfg.accumulated_recompile_limit = limit
+            cfg.suppress_errors = True
+            if hasattr(cfg, "_config"):
+                for key in ("recompile_limit", "accumulated_recompile_limit", "cache_size_limit"):
+                    if key in cfg._config:
+                        cfg._config[key].default = limit
+                if "suppress_errors" in cfg._config:
+                    cfg._config["suppress_errors"].default = True
+    except Exception:
+        pass
+
+
 def skip_torch_compile_dict(guard_entries):
     return [("transformer_options" not in entry.name) for entry in guard_entries]
 
@@ -38,8 +58,7 @@ class TorchCompileForForge(scripts.Script):
     sorting_priority = 99999
 
     def __init__(self):
-        torch._dynamo.config.cache_size_limit = 256
-        torch._dynamo.config.suppress_errors = True
+        configure_dynamo()
 
     def title(self):
         return "Torch Compile Integrated"
@@ -80,6 +99,7 @@ class TorchCompileForForge(scripts.Script):
         return [preset]
 
     def process_batch(self, p, preset: str, **kwargs):
+        configure_dynamo()
         if preset == "Automatic":
             return
 
@@ -124,6 +144,7 @@ class TorchCompileForForge(scripts.Script):
 
         @wraps(original_apply_model)
         def apply_model_with_compile(*args, **kwargs):
+            configure_dynamo()
             orig_model = get_attr(kmodel, "diffusion_model")
 
             if not hasattr(kmodel, "_forge_compiled_model"):
